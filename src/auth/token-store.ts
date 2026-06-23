@@ -73,6 +73,12 @@ export class TokenStore {
 		this.deleteFile("auth-state.json");
 	}
 
+	deleteOAuthState(): void {
+		this.deleteTokens();
+		this.deleteClientInfo();
+		this.deleteCodeVerifier();
+	}
+
 	readRestToken(): string | undefined {
 		const data = this.readJson<{ token: string }>("rest-token.json");
 		return data?.token;

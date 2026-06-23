@@ -25,10 +25,9 @@ export class MCPConnection {
 		await callbackServer.start(savedPort);
 
 		// If the actual port differs from the saved one, the cached redirect_uri is
-		// stale — clear client registration so the SDK re-registers with the new port.
-		if (savedPort !== undefined && callbackServer.port !== savedPort) {
-			tokenStore.deleteClientInfo();
-		}
+		// stale — clear MCP OAuth state so the SDK re-registers and re-authorizes
+		// with a matching client_id / refresh token pair.
+		invalidateOAuthStateForPortChange(tokenStore, savedPort, callbackServer.port);
 
 		const callbackPromise = callbackServer.waitForCallback();
 
@@ -192,5 +191,19 @@ export function extractPortFromClientInfo(
 		return port ? Number(port) : undefined;
 	} catch {
 		return undefined;
+	}
+}
+
+interface OAuthStateInvalidationStore {
+	deleteOAuthState(): void;
+}
+
+export function invalidateOAuthStateForPortChange(
+	tokenStore: OAuthStateInvalidationStore,
+	savedPort: number | undefined,
+	actualPort: number,
+): void {
+	if (savedPort !== undefined && actualPort !== savedPort) {
+		tokenStore.deleteOAuthState();
 	}
 }
