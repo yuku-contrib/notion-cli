@@ -93,9 +93,7 @@ export class TokenStore {
 	}
 
 	deleteAll(): void {
-		this.deleteTokens();
-		this.deleteClientInfo();
-		this.deleteCodeVerifier();
+		this.deleteOAuthState();
 		this.deleteRestToken();
 	}
 }

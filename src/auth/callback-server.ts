@@ -17,10 +17,6 @@ export class CallbackServer {
 		return this._port;
 	}
 
-	/**
-	 * Start the HTTP server and resolve once the port is known.
-	 * If preferredPort is given, try it first; fall back to OS-assigned on EADDRINUSE.
-	 */
 	async start(preferredPort?: number): Promise<void> {
 		const server = http.createServer();
 		this.server = server;
@@ -121,6 +117,7 @@ export class CallbackServer {
 
 				res.writeHead(200, { "Content-Type": "text/html" });
 				res.end(SUCCESS_HTML);
+				clearTimeout(timer);
 				resolve(code);
 			});
 
