@@ -20,18 +20,14 @@ export class MCPConnection {
 		const callbackServer = new CallbackServer();
 		this.callbackServer = callbackServer;
 
-		// Reuse the port from the previous client registration to avoid redirect_uri mismatch
+		// Reuse the port from the previous client registration only if the SDK needs
+		// browser authorization. Valid saved tokens should connect without binding a
+		// local callback port, which avoids destructive behavior during concurrent runs.
 		const savedPort = extractPortFromClientInfo(tokenStore.readClientInfo());
-		await callbackServer.start(savedPort);
-
-		// If the actual port differs from the saved one, the cached redirect_uri is
-		// stale — clear MCP OAuth state so the SDK re-registers and re-authorizes
-		// with a matching client_id / refresh token pair.
-		invalidateOAuthStateForPortChange(tokenStore, savedPort, callbackServer.port);
-
-		const callbackPromise = callbackServer.waitForCallback();
-
-		const provider = new NotionOAuthProvider(tokenStore, callbackServer);
+		const provider = new NotionOAuthProvider(tokenStore, callbackServer, {
+			preferredPort: savedPort,
+			lazyCallback: true,
+		});
 		const serverUrl = new URL(MCP_SERVER_URL);
 
 		const client = new Client({ name: "ncli", version }, { capabilities: {} });
@@ -47,7 +43,7 @@ export class MCPConnection {
 			if (error instanceof UnauthorizedError) {
 				console.error("Opening browser for Notion login...");
 
-				const code = await callbackPromise;
+				const code = await provider.waitForCallback();
 				await transport.finishAuth(code);
 
 				// Reconnect with new tokens
@@ -191,19 +187,5 @@ export function extractPortFromClientInfo(
 		return port ? Number(port) : undefined;
 	} catch {
 		return undefined;
-	}
-}
-
-interface OAuthStateInvalidationStore {
-	deleteOAuthState(): void;
-}
-
-export function invalidateOAuthStateForPortChange(
-	tokenStore: OAuthStateInvalidationStore,
-	savedPort: number | undefined,
-	actualPort: number,
-): void {
-	if (savedPort !== undefined && actualPort !== savedPort) {
-		tokenStore.deleteOAuthState();
 	}
 }

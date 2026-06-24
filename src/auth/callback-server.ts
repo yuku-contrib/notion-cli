@@ -55,7 +55,7 @@ export class CallbackServer {
 		await listen(0);
 	}
 
-	waitForCallback(timeoutMs = AUTH_TIMEOUT_MS): Promise<string> {
+	waitForCallback(timeoutMs = AUTH_TIMEOUT_MS, expectedState?: string): Promise<string> {
 		return new Promise<string>((resolve, reject) => {
 			const server = this.server;
 			if (!server) {
@@ -81,6 +81,7 @@ export class CallbackServer {
 
 				const code = url.searchParams.get("code");
 				const error = url.searchParams.get("error");
+				const state = url.searchParams.get("state");
 
 				if (error) {
 					const description = url.searchParams.get("error_description") || error;
@@ -99,6 +100,19 @@ export class CallbackServer {
 						new CliError(
 							"Missing authorization code",
 							"OAuth callback did not include a code parameter",
+							"Run ncli login to retry",
+						),
+					);
+					return;
+				}
+
+				if (expectedState !== undefined && state !== expectedState) {
+					res.writeHead(400, { "Content-Type": "text/html" });
+					res.end("<h1>Invalid OAuth state</h1>");
+					reject(
+						new CliError(
+							"Invalid OAuth state",
+							"OAuth callback state did not match the authorization request",
 							"Run ncli login to retry",
 						),
 					);
