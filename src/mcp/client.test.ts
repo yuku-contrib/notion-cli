@@ -127,7 +127,7 @@ describe("MCPConnection", () => {
 		await conn.disconnect();
 	});
 
-	it("completes UnauthorizedError auth recovery through the real provider callback handoff", async () => {
+	it("completes UnauthorizedError auth recovery through the provider callback handoff", async () => {
 		mocks.clientConnect
 			.mockImplementationOnce(async () => {
 				const provider = mocks.transportInstances[0]?.authProvider as NotionOAuthProvider;

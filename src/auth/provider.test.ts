@@ -76,7 +76,6 @@ describe("NotionOAuthProvider", () => {
 		store.saveTokens(tokens);
 		const callbackServer = trackedCallbackServer();
 		const provider = new NotionOAuthProvider(store, callbackServer, {
-			lazyCallback: true,
 			preferredPort: 54975,
 		});
 
@@ -84,139 +83,104 @@ describe("NotionOAuthProvider", () => {
 		expect(callbackServer.port).toBe(0);
 	});
 
-	it("starts the callback server from clientInformation using the preferred port", async () => {
+	it("returns saved client info without starting the server when refresh has not failed", async () => {
+		const clientInfo = {
+			client_id: "client-id",
+			redirect_uris: ["http://127.0.0.1:54975/callback"],
+		};
+		store.saveClientInfo(clientInfo);
+		const callbackServer = trackedCallbackServer();
+		const provider = new NotionOAuthProvider(store, callbackServer, {
+			preferredPort: 54975,
+		});
+
+		await expect(provider.clientInformation()).resolves.toEqual(clientInfo);
+		expect(callbackServer.port).toBe(0);
+	});
+
+	it("starts the server and returns undefined when no saved client info exists", async () => {
+		const callbackServer = trackedCallbackServer();
+		const provider = new NotionOAuthProvider(store, callbackServer);
+
+		await expect(provider.clientInformation()).resolves.toBeUndefined();
+		expect(callbackServer.port).toBeGreaterThan(0);
+	});
+
+	it("returns saved client info after refresh failure when port matches", async () => {
 		const preferredPort = await occupyPort();
+		// Free the port so it can be reused
 		const blocker = blockers.pop();
 		await new Promise<void>((resolve) => blocker?.close(() => resolve()));
 
-		store.saveClientInfo({
+		const clientInfo = {
 			client_id: "client-id",
 			redirect_uris: [`http://127.0.0.1:${preferredPort}/callback`],
-		});
+		};
+		store.saveClientInfo(clientInfo);
 		const callbackServer = trackedCallbackServer();
 		const provider = new NotionOAuthProvider(store, callbackServer, {
-			lazyCallback: true,
 			preferredPort,
 		});
 
-		await expect(provider.clientInformation()).resolves.toEqual({
-			client_id: "client-id",
-			redirect_uris: [`http://127.0.0.1:${preferredPort}/callback`],
-		});
+		// Simulate SDK refresh failure path
+		await provider.invalidateCredentials("tokens");
+
+		await expect(provider.clientInformation()).resolves.toEqual(clientInfo);
 		expect(callbackServer.port).toBe(preferredPort);
 	});
 
-	it("keeps saved client information on callback port fallback while refresh tokens can be tried", async () => {
+	it("deletes client info and returns undefined after refresh failure with port conflict", async () => {
 		const occupiedPort = await occupyPort();
-		const tokens = {
-			access_token: "access-token",
-			token_type: "Bearer",
-			refresh_token: "refresh-token",
-		};
 		const clientInfo = {
 			client_id: "client-id",
 			redirect_uris: [`http://127.0.0.1:${occupiedPort}/callback`],
 		};
-		store.saveTokens(tokens);
 		store.saveClientInfo(clientInfo);
-		store.saveCodeVerifier("verifier");
-		store.saveRestToken("ntn_rest");
 
 		const callbackServer = trackedCallbackServer();
 		const provider = new NotionOAuthProvider(store, callbackServer, {
-			lazyCallback: true,
 			preferredPort: occupiedPort,
 		});
 
-		await expect(provider.clientInformation()).resolves.toEqual(clientInfo);
-
-		expect(callbackServer.port).toBeGreaterThan(0);
-		expect(callbackServer.port).not.toBe(occupiedPort);
-		expect(store.readTokens()).toEqual(tokens);
-		expect(store.readClientInfo()).toEqual(clientInfo);
-		expect(store.readCodeVerifier()).toBe("verifier");
-		expect(store.readRestToken()).toBe("ntn_rest");
-	});
-
-	it("stages fallback-port client registration until replacement tokens are saved", async () => {
-		const occupiedPort = await occupyPort();
-		const tokens = {
-			access_token: "old-access-token",
-			token_type: "Bearer",
-			refresh_token: "old-refresh-token",
-		};
-		const oldClientInfo = {
-			client_id: "old-client-id",
-			redirect_uris: [`http://127.0.0.1:${occupiedPort}/callback`],
-		};
-		const newClientInfo = {
-			client_id: "new-client-id",
-			redirect_uris: ["http://127.0.0.1:60000/callback"],
-		};
-		const newTokens = {
-			access_token: "new-access-token",
-			token_type: "Bearer",
-			refresh_token: "new-refresh-token",
-		};
-		store.saveTokens(tokens);
-		store.saveClientInfo(oldClientInfo);
-		store.saveCodeVerifier("verifier");
-
-		const callbackServer = trackedCallbackServer();
-		const provider = new NotionOAuthProvider(store, callbackServer, {
-			lazyCallback: true,
-			preferredPort: occupiedPort,
-		});
-
-		await provider.clientInformation();
+		// Simulate SDK refresh failure path
 		await provider.invalidateCredentials("tokens");
 
 		await expect(provider.clientInformation()).resolves.toBeUndefined();
-		await provider.saveClientInformation(newClientInfo);
-
-		expect(store.readTokens()).toBeUndefined();
-		expect(store.readClientInfo()).toEqual(oldClientInfo);
-
-		await provider.saveTokens(newTokens);
-
-		expect(store.readClientInfo()).toEqual(newClientInfo);
-		expect(store.readTokens()).toEqual(newTokens);
+		expect(callbackServer.port).toBeGreaterThan(0);
+		expect(callbackServer.port).not.toBe(occupiedPort);
+		expect(store.readClientInfo()).toBeUndefined();
 	});
 
-	it("starts the lazy callback before waiting when redirect has not initialized it", async () => {
-		let port = 0;
-		const start = vi.fn(async (preferredPort?: number) => {
-			port = preferredPort ?? 60000;
-		});
-		const waitForCallback = vi.fn(async () => "callback-code");
-		const callbackServer = fakeCallbackServer({
-			get port() {
-				return port;
-			},
-			start,
-			waitForCallback,
-		});
-		const provider = new NotionOAuthProvider(store, callbackServer, {
-			lazyCallback: true,
-			preferredPort: 60000,
-		});
+	it("throws when waitForCallback is called before redirectToAuthorization", async () => {
+		const callbackServer = fakeCallbackServer({ port: 60000 });
+		const provider = new NotionOAuthProvider(store, callbackServer);
 
-		await expect(provider.waitForCallback()).resolves.toBe("callback-code");
-
-		expect(start).toHaveBeenCalledWith(60000);
-		expect(waitForCallback).toHaveBeenCalledTimes(1);
+		await expect(provider.waitForCallback()).rejects.toThrow("OAuth callback not started");
 	});
 
 	it("creates a fresh callback wait after a rejected callback promise", async () => {
-		const error = new Error("timeout");
+		let rejectCallback: (err: Error) => void;
+		const firstPromise = new Promise<string>((_, reject) => {
+			rejectCallback = reject;
+		});
 		const waitForCallback = vi
 			.fn<() => Promise<string>>()
-			.mockRejectedValueOnce(error)
+			.mockReturnValueOnce(firstPromise)
 			.mockResolvedValueOnce("callback-code");
 		const callbackServer = fakeCallbackServer({ port: 60000, waitForCallback });
-		const provider = new NotionOAuthProvider(store, callbackServer, { lazyCallback: true });
+		const provider = new NotionOAuthProvider(store, callbackServer);
 
-		await expect(provider.waitForCallback()).rejects.toThrow("timeout");
+		// First: redirectToAuthorization starts a callback wait
+		vi.mock("open", () => ({ default: vi.fn() }));
+		await provider.redirectToAuthorization(new URL("https://example.com/auth"));
+		const firstWait = provider.waitForCallback();
+
+		// Reject after waitForCallback() has captured the promise
+		rejectCallback?.(new Error("timeout"));
+		await expect(firstWait).rejects.toThrow("timeout");
+
+		// Second: a new redirectToAuthorization starts a fresh wait
+		await provider.redirectToAuthorization(new URL("https://example.com/auth"));
 		await expect(provider.waitForCallback()).resolves.toBe("callback-code");
 
 		expect(waitForCallback).toHaveBeenCalledTimes(2);

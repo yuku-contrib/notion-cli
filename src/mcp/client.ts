@@ -20,13 +20,11 @@ export class MCPConnection {
 		const callbackServer = new CallbackServer();
 		this.callbackServer = callbackServer;
 
-		// Reuse the port from the previous client registration only if the SDK needs
-		// browser authorization. Valid saved tokens should connect without binding a
-		// local callback port, which avoids destructive behavior during concurrent runs.
+		// Derive the port from the previous client registration so the provider
+		// can reuse it when the SDK needs browser authorization.
 		const savedPort = extractPortFromClientInfo(tokenStore.readClientInfo());
 		const provider = new NotionOAuthProvider(tokenStore, callbackServer, {
 			preferredPort: savedPort,
-			lazyCallback: true,
 		});
 		const serverUrl = new URL(MCP_SERVER_URL);
 
