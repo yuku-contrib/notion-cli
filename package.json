@@ -1,6 +1,6 @@
 {
 	"name": "@yukukotani/ncli",
-	"version": "0.3.3",
+	"version": "0.3.4",
 	"description": "CLI for Notion — MCP + REST API support",
 	"type": "module",
 	"bin": {
