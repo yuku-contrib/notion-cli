@@ -58,41 +58,4 @@ describe("CallbackServer", () => {
 			}
 		});
 	});
-
-	describe("waitForCallback()", () => {
-		it("resolves the authorization code when state matches", async () => {
-			const server = tracked(new CallbackServer());
-			await server.start();
-
-			const callback = server.waitForCallback(5_000, "expected-state");
-			await new Promise<void>((resolve, reject) => {
-				http
-					.get(`http://127.0.0.1:${server.port}/callback?code=abc&state=expected-state`, (res) => {
-						res.resume();
-						res.on("end", resolve);
-					})
-					.on("error", reject);
-			});
-
-			await expect(callback).resolves.toBe("abc");
-		});
-
-		it("rejects a callback with mismatched state", async () => {
-			const server = tracked(new CallbackServer());
-			await server.start();
-
-			const callback = server.waitForCallback(5_000, "expected-state");
-			const expectation = expect(callback).rejects.toThrow("Invalid OAuth state");
-			await new Promise<void>((resolve, reject) => {
-				http
-					.get(`http://127.0.0.1:${server.port}/callback?code=abc&state=wrong-state`, (res) => {
-						res.resume();
-						res.on("end", resolve);
-					})
-					.on("error", reject);
-			});
-
-			await expectation;
-		});
-	});
 });

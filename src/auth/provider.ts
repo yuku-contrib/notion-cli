@@ -1,4 +1,3 @@
-import { randomBytes } from "node:crypto";
 import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js";
 import type {
 	OAuthClientInformationFull,
@@ -19,7 +18,6 @@ export class NotionOAuthProvider implements OAuthClientProvider {
 	private callbackStartPromise: Promise<void> | null = null;
 	private callbackPromise: Promise<string> | null = null;
 	private refreshFailed = false;
-	private oauthState: string | undefined;
 	private readonly preferredPort?: number;
 
 	constructor(
@@ -42,11 +40,6 @@ export class NotionOAuthProvider implements OAuthClientProvider {
 			response_types: ["code"],
 			token_endpoint_auth_method: "none",
 		};
-	}
-
-	state(): string {
-		this.oauthState ??= randomBytes(16).toString("hex");
-		return this.oauthState;
 	}
 
 	async clientInformation(): Promise<OAuthClientInformationFull | undefined> {
@@ -151,14 +144,12 @@ export class NotionOAuthProvider implements OAuthClientProvider {
 	private beginCallbackWait(): Promise<string> {
 		if (this.callbackPromise) return this.callbackPromise;
 
-		const callbackPromise = this.callbackServer
-			.waitForCallback(undefined, this.oauthState)
-			.catch((error: unknown) => {
-				if (this.callbackPromise === callbackPromise) {
-					this.callbackPromise = null;
-				}
-				throw error;
-			});
+		const callbackPromise = this.callbackServer.waitForCallback().catch((error: unknown) => {
+			if (this.callbackPromise === callbackPromise) {
+				this.callbackPromise = null;
+			}
+			throw error;
+		});
 		this.callbackPromise = callbackPromise;
 		return callbackPromise;
 	}

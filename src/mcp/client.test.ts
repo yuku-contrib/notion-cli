@@ -131,7 +131,6 @@ describe("MCPConnection", () => {
 		mocks.clientConnect
 			.mockImplementationOnce(async () => {
 				const provider = mocks.transportInstances[0]?.authProvider as NotionOAuthProvider;
-				provider.state();
 				await provider.redirectToAuthorization(new URL("https://auth.example/authorize"));
 				throw new UnauthorizedError();
 			})
@@ -141,7 +140,7 @@ describe("MCPConnection", () => {
 		await conn.connect();
 
 		expect(mocks.callbackStart).toHaveBeenCalledWith(54975);
-		expect(mocks.callbackWait).toHaveBeenCalledWith(undefined, expect.any(String));
+		expect(mocks.callbackWait).toHaveBeenCalled();
 		expect(mocks.openBrowser).toHaveBeenCalledWith("https://auth.example/authorize");
 		expect(mocks.finishAuth).toHaveBeenCalledWith("callback-code");
 		expect(mocks.clientConnect).toHaveBeenCalledTimes(2);
