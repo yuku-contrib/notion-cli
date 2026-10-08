@@ -83,12 +83,17 @@ describe("NotionOAuthProvider", () => {
 		expect(callbackServer.port).toBe(0);
 	});
 
-	it("returns saved client info without starting the server when refresh has not failed", async () => {
+	it("returns saved client info without starting the server when a refresh token is saved", async () => {
 		const clientInfo = {
 			client_id: "client-id",
 			redirect_uris: ["http://127.0.0.1:54975/callback"],
 		};
 		store.saveClientInfo(clientInfo);
+		store.saveTokens({
+			access_token: "access-token",
+			token_type: "Bearer",
+			refresh_token: "refresh-token",
+		});
 		const callbackServer = trackedCallbackServer();
 		const provider = new NotionOAuthProvider(store, callbackServer, {
 			preferredPort: 54975,
@@ -96,6 +101,25 @@ describe("NotionOAuthProvider", () => {
 
 		await expect(provider.clientInformation()).resolves.toEqual(clientInfo);
 		expect(callbackServer.port).toBe(0);
+	});
+
+	it("starts the server on the saved port when client info exists but no refresh token is saved", async () => {
+		const preferredPort = await occupyPort();
+		const blocker = blockers.pop();
+		await new Promise<void>((resolve) => blocker?.close(() => resolve()));
+
+		const clientInfo = {
+			client_id: "client-id",
+			redirect_uris: [`http://127.0.0.1:${preferredPort}/callback`],
+		};
+		store.saveClientInfo(clientInfo);
+		const callbackServer = trackedCallbackServer();
+		const provider = new NotionOAuthProvider(store, callbackServer, {
+			preferredPort,
+		});
+
+		await expect(provider.clientInformation()).resolves.toEqual(clientInfo);
+		expect(provider.redirectUrl).toBe(`http://127.0.0.1:${preferredPort}/callback`);
 	});
 
 	it("starts the server and returns undefined when no saved client info exists", async () => {

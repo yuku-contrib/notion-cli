@@ -17,7 +17,6 @@ export interface NotionOAuthProviderOptions {
 export class NotionOAuthProvider implements OAuthClientProvider {
 	private callbackStartPromise: Promise<void> | null = null;
 	private callbackPromise: Promise<string> | null = null;
-	private refreshFailed = false;
 	private readonly preferredPort?: number;
 
 	constructor(
@@ -51,13 +50,11 @@ export class NotionOAuthProvider implements OAuthClientProvider {
 			return undefined;
 		}
 
-		if (!this.refreshFailed) {
-			// First call: let the SDK try refresh with the saved client info.
-			// No server needed yet — refresh doesn't use redirect_uri.
+		if (this.tokens()?.refresh_token) {
+			// The SDK will refresh, which doesn't use redirect_uri.
 			return clientInfo;
 		}
 
-		// Refresh failed: start the server for browser authorization.
 		await this.ensureCallbackServerStarted();
 		if (this.preferredPort !== undefined && this.callbackServer.port !== this.preferredPort) {
 			// Port changed — saved redirect_uri is stale, force re-registration
@@ -118,14 +115,12 @@ export class NotionOAuthProvider implements OAuthClientProvider {
 		switch (scope) {
 			case "all":
 				this.tokenStore.deleteOAuthState();
-				this.refreshFailed = false;
 				break;
 			case "client":
 				this.tokenStore.deleteClientInfo();
 				break;
 			case "tokens":
 				this.tokenStore.deleteTokens();
-				this.refreshFailed = true;
 				break;
 			case "verifier":
 				this.tokenStore.deleteCodeVerifier();
